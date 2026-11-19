@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="{{ 'dark' if dark else 'light' }}">
+<title>{{ workspace }} - Clankit</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" id="theme-css" href="/theme.css">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<div id="app" class="app" data-view="main">
+  <header id="crumb" class="crumb"></header>
+  <div id="rollup" class="rollup" hidden></div>
+  <main id="main" class="main">
+    <div id="scroller" class="scroller">
+      <div id="log" class="log" role="log" aria-live="polite" aria-label="Transcript"></div>
+    </div>
+    <button id="jump" class="jump" type="button" hidden></button>
+    <div id="dock" class="dock">
+      <div id="panels" class="panels"></div>
+      <div id="menu" class="menu" hidden></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <span class="composer-glyph" aria-hidden="true">›</span>
+        <textarea id="input" rows="1" aria-label="Message to Clankit" spellcheck="true"></textarea>
+      </form>
+      <div id="hint" class="hint"></div>
+    </div>
+  </main>
+  <aside id="tree" class="tree" aria-label="Task tree"></aside>
+  <section id="settings" class="settings" aria-label="Settings" hidden></section>
+  <footer id="status" class="status"></footer>
+</div>
+<div id="popup" class="popup" hidden></div>
+<noscript><p class="noscript">The Clankit web interface needs JavaScript.</p></noscript>
+</body>
+</html>
