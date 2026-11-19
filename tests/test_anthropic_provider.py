@@ -1479,6 +1479,13 @@ async def test_configuration_decides_the_endpoint_and_key_not_the_sdk_environmen
     assert api.requests[0].headers["authorization"] == "Bearer sk-test"
 
 
+async def test_brotli_is_never_offered_to_the_server(api: FakeAPI, connect: Connect) -> None:
+    api.queue(reply(text_block(0, "ok")))
+    await connect().complete(ask())
+
+    assert api.requests[0].headers["accept-encoding"] == "gzip, deflate"
+
+
 async def test_keyless_server_needs_no_key(api: FakeAPI, connect: Connect) -> None:
     api.queue(reply(text_block(0, "ok"), model="local"))
     provider = connect(id="local", api_key="", keyless=True, base_url="http://localhost:8080")

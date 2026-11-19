@@ -34,6 +34,21 @@ uv run clankit --version
 `uv run clankit` from anywhere in the repo. To install it as a standalone tool, use
 `uv tool install .` from the repo root.
 
+### Troubleshooting
+
+- **`ModuleNotFoundError: No module named 'zope.deprecation'` when starting `clankit web`**:
+  your Python mixes Debian's `python3-zope.interface` (in the system site-packages) with a
+  pip-installed `zope.deprecation` (in `~/.local`), and the two namespace styles cannot see
+  each other. Either install the matching system package
+  (`sudo apt install python3-zope.deprecation`), or uninstall `python3-zope.interface`
+  so pip owns the whole `zope` namespace.
+
+- **`unexpected TypeError: process() takes no keyword arguments` when prompting**:
+  an old `brotli` binding (e.g. Debian's `python3-brotli` 1.1) is on the path and
+  `httpx2`'s brotli decoder calls it with a keyword argument it does not know. Clankit
+  now only advertises `gzip`/`deflate`, so upgrade to clankit 0.1.0 with this fix, or
+  install a newer brotli (`pip install -U brotli`).
+
 ## Getting started
 
 On first run Clankit writes a commented starter file at `~/.config/clankit/config.kdl`

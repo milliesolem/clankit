@@ -316,6 +316,13 @@ async def test_ambient_openai_identity_never_reaches_another_provider(
         assert "private" not in str(request.headers) and "ambient" not in str(request.headers)
 
 
+async def test_brotli_is_never_offered_to_the_server(connect: Connect) -> None:
+    backend = Backend(says("ok"))
+    await run(connect(backend), ask())
+
+    assert backend.requests[0].headers["accept-encoding"] == "gzip, deflate"
+
+
 async def test_keyless_server_gets_no_authorization_header(
     connect: Connect, monkeypatch: pytest.MonkeyPatch
 ) -> None:

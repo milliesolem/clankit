@@ -198,7 +198,14 @@ def _isolating_headers(key: str) -> dict[str, Any]:
     ``Authorization`` entry would even replace this provider's own key. Each is switched off
     by name; the key is stated explicitly so that nothing can stand in for it.
     """
-    headers: dict[str, Any] = {"OpenAI-Organization": Omit(), "OpenAI-Project": Omit()}
+    headers: dict[str, Any] = {
+        "OpenAI-Organization": Omit(),
+        "OpenAI-Project": Omit(),
+        # Brotli is never offered: httpx2's decoder crashes on the older `brotli` bindings
+        # some systems carry (no `output_buffer_limit` keyword), with no graceful fallback.
+        # gzip and deflate decode through the standard library everywhere.
+        "Accept-Encoding": "gzip, deflate",
+    }
     for line in os.environ.get("OPENAI_CUSTOM_HEADERS", "").split("\n"):
         name, separator, _ = line.partition(":")
         if separator and name.strip():

@@ -88,6 +88,10 @@ _THINKING_BUDGETS: Final[dict[str, int]] = {
 #: Server-side refusal fallback: when a safety classifier declines a request, the API re-runs
 #: it on the model Anthropic recommends for that refusal category, inside the same call.
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
+#: Brotli is never offered: httpx2's decoder crashes on the older `brotli` bindings some
+#: systems carry (no `output_buffer_limit` keyword), with no graceful fallback. gzip and
+#: deflate decode through the standard library everywhere.
+_SAFE_ENCODINGS: Final[dict[str, str]] = {"Accept-Encoding": "gzip, deflate"}
 #: The only models that accept the `fallbacks` parameter. Matched exactly, never by pattern:
 #: sending it to any other model is a rejected request.
 _FALLBACK_MODELS = frozenset(
@@ -349,6 +353,7 @@ class AnthropicProvider(Provider):
             base_url=config.base_url or _API_URL,
             max_retries=0,
             http_client=http_client,
+            default_headers=_SAFE_ENCODINGS,
         )
 
     # -- Provider -------------------------------------------------------------------------------
