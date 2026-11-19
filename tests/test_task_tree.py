@@ -118,6 +118,29 @@ async def test_simple_task_is_done_by_the_root_alone(session: Session, agents: A
     assert "delegate" in tools and "ask_user" in tools and "report" not in tools
 
 
+async def test_eager_mode_pushes_splitting_in_the_prompt_and_the_tool(
+    session: Session, agents: Agents, config: Config
+) -> None:
+    config.orchestration.set_option("task-tree", "decomposition", "eager")
+    agents.add("wide", "done")
+    await session.run("wide")
+    request = agents.requests["wide"][0]
+    delegate = next(t for t in request.tools if t.name == "delegate")
+    assert "Splitting is expected" in delegate.description
+    assert "most tasks are better done yourself" not in delegate.description
+    assert "Split the work up front" in request.system
+
+
+async def test_adaptive_mode_keeps_the_cautious_guidance(
+    session: Session, agents: Agents, config: Config
+) -> None:
+    config.orchestration.set_option("task-tree", "decomposition", "adaptive")
+    agents.add("narrow", "done")
+    await session.run("narrow")
+    delegate = next(t for t in agents.requests["narrow"][0].tools if t.name == "delegate")
+    assert "most tasks are better done yourself" in delegate.description
+
+
 async def test_parallel_subtasks_are_built_checked_and_reported(
     session: Session, agents: Agents, workspace: Path
 ) -> None:

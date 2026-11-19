@@ -81,9 +81,11 @@ each touches files the others do not, and each can be checked on its own.
     "eager": """\
 ## Splitting the work
 
-For a task that spans several components or files that can be built independently, split \
-it with `delegate` so the parts are built in parallel by focused agents. Keep small, \
-tightly coupled or strictly sequential work for yourself.""",
+Split the work up front with `delegate` whenever it has parts that can be built \
+independently: several components, files, features or fixes that can proceed at the same \
+time. Hand each part to a focused agent so the parts run in parallel - that parallelism is \
+the point. Keep for yourself only what is small, tightly coupled or strictly sequential, \
+and the final integration.""",
     "minimal": """\
 ## Splitting the work
 
@@ -290,10 +292,27 @@ class DelegateTool(Tool):
     name = "delegate"
     read_only = False
 
+    #: The closing line of the tool description, per decomposition mode. The model reads this
+    #: with the tool definition, so it must agree with the guidance in the system prompt.
+    _GUIDANCE = {
+        "adaptive": "Read the guidance in your instructions before using this: most tasks are "
+        "better done yourself.",
+        "eager": "Splitting is expected: use this whenever your task has parts that can be "
+        "built independently.",
+        "minimal": "Use only when the task clearly cannot be finished in one conversation; "
+        "split it into as few parts as possible.",
+    }
+
     def __init__(self, tree: TaskTreeOrchestrator, node: NodeInfo, *, cross_model: bool) -> None:
         self._tree = tree
         self._node = node
         max_children = tree.setting("max-children")
+        mode = tree.setting("decomposition")
+        self.description = (
+            "Split your task into subtasks, each done by its own agent, and wait for their "
+            "reports. Independent subtasks with separate write scopes run in parallel. "
+            f"{self._GUIDANCE.get(mode, self._GUIDANCE['adaptive'])}"
+        )
         item: dict[str, Any] = {
             "type": "object",
             "properties": {
@@ -346,12 +365,6 @@ class DelegateTool(Tool):
             "required": ["subtasks"],
             "additionalProperties": False,
         }
-        self.description = (
-            "Split your task into subtasks, each done by its own agent, and wait for their "
-            "reports. Independent subtasks with separate write scopes run in parallel. Read "
-            "the guidance in your instructions before using this: most tasks are better done "
-            "yourself."
-        )
 
     def summarize(self, tool_input: dict[str, Any]) -> str:
         subtasks = tool_input.get("subtasks") or []
@@ -373,10 +386,11 @@ class TaskTreeOrchestrator(Orchestrator):
     title = "Task Tree"
     summary = "Agents split work into subtasks recursively; parents review and integrate."
     guidance = (
-        "Best for large tasks with genuinely independent parts. Every agent works alone "
-        "unless splitting clearly helps, so small tasks cost about the same as Solo. "
-        "Subtasks own separate files, are accepted by commands the harness runs, and can use "
-        "other models. Deep or wide trees multiply cost: the node and run budgets cap it."
+        "Best for large tasks with genuinely independent parts. How eagerly agents split is "
+        "set by decomposition: minimal keeps them together, eager splits multi-part work up "
+        "front, adaptive is in between. Subtasks own separate files, are accepted by "
+        "commands the harness runs, and can use other models. Deep or wide trees multiply "
+        "cost: the node and run budgets cap it."
     )
     settings = (
         Setting(
