@@ -1108,3 +1108,68 @@ async def test_an_edit_asks_the_user_with_a_diff_and_a_workspace_wide_rule(
     assert (workspace / "a.txt").read_text() == "two\n" and (workspace / "b.txt").exists()
     # the write that followed was covered by the session rule
     assert sum(isinstance(e, PermissionRequested) for e in events) == 1
+
+
+# -- windows -----------------------------------------------------------------------------------
+
+
+def test_windows_command_prefers_bash(monkeypatch: pytest.MonkeyPatch) -> None:
+    from clankit.tools import shell as shellmod
+
+    monkeypatch.setattr(
+        shellmod.shutil,
+        "which",
+        lambda name: r"C:\Program Files\Git\bin\bash.exe" if name == "bash" else None,
+    )
+    assert shellmod._windows_command("ls -la") == [
+        r"C:\Program Files\Git\bin\bash.exe",
+        "-c",
+        "ls -la",
+    ]
+
+
+def test_windows_command_falls_back_to_cmd(monkeypatch: pytest.MonkeyPatch) -> None:
+    from clankit.tools import shell as shellmod
+
+    monkeypatch.setattr(shellmod.shutil, "which", lambda name: None)
+    monkeypatch.setenv("ComSpec", r"C:\Windows\System32\cmd.exe")
+    assert shellmod._windows_command("dir") == [r"C:\Windows\System32\cmd.exe", "/d", "/c", "dir"]
+
+
+class _FakeStream:
+    """A subprocess stdout stand-in: fixed chunks, then end-of-file."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = list(chunks)
+
+    async def read(self, n: int) -> bytes:
+        return self._chunks.pop(0) if self._chunks else b""
+
+
+async def test_windows_pump_reads_everything() -> None:
+    from clankit.tools import shell as shellmod
+
+    capture = shellmod._Capture(1000)
+    await shellmod._pump(_FakeStream([b"abc", b"def", b"", b"never"]), capture)  # type: ignore[arg-type]
+    assert capture.text() == "abcdef"
+
+
+async def test_windows_drain_cancels_a_stuck_pump() -> None:
+    from clankit.tools import shell as shellmod
+
+    async def stuck() -> None:
+        await asyncio.sleep(3600)
+
+    task = asyncio.create_task(stuck())
+    await shellmod._drain(task, 0.05)
+    await asyncio.sleep(0)  # let the cancellation land
+    assert task.cancelled()
+
+
+def test_ctrl_break_is_a_noop_on_posix() -> None:
+    from clankit.tools import shell as shellmod
+
+    class Process:
+        pid = 1
+
+    shellmod._ctrl_break(Process())  # type: ignore[arg-type]

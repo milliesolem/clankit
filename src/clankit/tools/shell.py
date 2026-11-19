@@ -5,6 +5,8 @@ Three things here need more care than "call subprocess":
 * **Containment.** The command runs in its own session and process group with stdin closed.
   When it times out or the user interrupts, the whole group is stopped (SIGTERM, a short
   grace period, SIGKILL), so no test runner or dev server outlives the call that started it.
+  On Windows the command runs in WSL bash, Git Bash or cmd.exe - whichever is installed - in
+  a console group of its own, stopped with CTRL_BREAK and then terminated.
 * **Bounded output.** Only the beginning and the end of what the command prints are kept,
   however much it prints.
 * **Approval.** Every command asks, except a small set that can be shown, from its text alone,
@@ -21,6 +23,8 @@ import os
 import re
 import shutil
 import signal
+import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -65,7 +69,8 @@ class BashTool(Tool):
         "work, and need fewer approvals. Commands must run unattended: stdin is closed, so "
         "anything that prompts, pages or opens an editor fails; pass --yes, -m and the like. "
         "Every call starts a new shell in the workspace directory, so cd and variables do "
-        "not carry over; chain steps with && instead. A command that runs past its timeout "
+        "not carry over; chain steps with && instead. On Windows the shell is WSL bash when "
+        "it is installed, else Git Bash, else cmd.exe. A command that runs past its timeout "
         "is killed together with everything it started. Long output is shortened to its "
         "beginning and end; redirect to a file and search that if you need all of it. A "
         "process meant to keep running after the call must be started in the background "
@@ -265,6 +270,8 @@ async def _execute(
     by itself (timeout, cancellation), its process group is gone before this returns or
     raises.
     """
+    if sys.platform == "win32":
+        return await _execute_windows(command, ctx, time_limit, capture)
     pipe = _OutputPipe(capture)
     try:
         try:
@@ -295,6 +302,93 @@ async def _execute(
         return process.returncode, timed_out
     finally:
         pipe.close()
+
+
+async def _execute_windows(
+    command: str, ctx: ToolContext, time_limit: int, capture: _Capture
+) -> tuple[int, bool]:
+    """`_execute` for Windows: the same contract, through a native console process group.
+
+    asyncio cannot watch file descriptors for readability on Windows (`add_reader` raises
+    `NotImplementedError` for pipes), so the output is read from the subprocess stream by a
+    pump task instead. The group is stopped with CTRL_BREAK rather than signals.
+    """
+    process = await asyncio.create_subprocess_exec(
+        *_windows_command(command),
+        cwd=ctx.workspace,
+        env=_environment(ctx),
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        # A console group of its own: CTRL_BREAK stops the command and everything it started.
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    )
+    assert process.stdout is not None
+    pumping = asyncio.create_task(_pump(process.stdout, capture))
+    try:
+        timed_out = not await _exits_within(process, time_limit)
+        if timed_out:
+            await _stop_windows(process)
+        await _drain(pumping, DRAIN_GRACE)
+    except BaseException:
+        await _stop_windows(process)
+        raise
+    assert process.returncode is not None
+    return process.returncode, timed_out
+
+
+def _windows_command(command: str) -> list[str]:
+    """The command as a program and arguments: WSL or Git Bash when either is installed,
+    cmd.exe otherwise. (On Windows, WSL puts its own ``bash.exe`` on the PATH.)"""
+    bash = shutil.which("bash")
+    if bash:
+        return [bash, "-c", command]
+    # `getenv` is case-insensitive on Windows, where the variable is "ComSpec".
+    comspec = os.getenv("ComSpec", "") or shutil.which("cmd") or "cmd.exe"  # noqa: SIM112
+    return [comspec, "/d", "/c", command]
+
+
+async def _pump(stream: asyncio.StreamReader, capture: _Capture) -> None:
+    """Read one subprocess stream to its end, feeding `capture`."""
+    while True:
+        chunk = await stream.read(65536)
+        if not chunk:
+            return
+        capture.feed(chunk)
+
+
+async def _drain(pumping: asyncio.Task[None], patience: float) -> None:
+    """Wait for the pump to finish, but no longer than `patience` seconds: a background
+    process the command left behind may hold the stream open indefinitely."""
+    try:
+        await asyncio.wait_for(asyncio.shield(pumping), patience)
+    except TimeoutError:
+        pumping.cancel()
+
+
+async def _stop_windows(process: asyncio.subprocess.Process) -> None:
+    """End the command's console group: CTRL_BREAK, time to clean up, then terminate."""
+    if process.returncode is not None:
+        return
+    _ctrl_break(process)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + TERM_GRACE
+    try:
+        while process.returncode is None and loop.time() < deadline:  # noqa: ASYNC110
+            await asyncio.sleep(0.02)
+    finally:
+        if process.returncode is None:
+            process.kill()
+    await process.wait()
+
+
+def _ctrl_break(process: asyncio.subprocess.Process) -> None:
+    """CTRL_BREAK reaches every console process in the command's group, like a group signal."""
+    event = getattr(signal, "CTRL_BREAK_EVENT", None)
+    if event is None:
+        return
+    with contextlib.suppress(OSError, ProcessLookupError):
+        os.kill(process.pid, event)
 
 
 async def _exits_within(process: asyncio.subprocess.Process, seconds: float) -> bool:
