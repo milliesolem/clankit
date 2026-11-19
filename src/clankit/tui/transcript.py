@@ -125,10 +125,12 @@ class Block(Widget):
             await self.apply(entry, ctx)
 
     def signature(self, entry: Entry, ctx: Context) -> object:
-        raise NotImplementedError
+        """What this block shows, as a cheap comparison value. A plain block shows nothing."""
+        return None
 
     async def apply(self, entry: Entry, ctx: Context) -> None:
-        raise NotImplementedError
+        """Repaint for a changed entry. A plain block has nothing to paint."""
+        self.refresh(layout=True)
 
     def toggle(self) -> None:
         """Open or close the block (expandable blocks only)."""
@@ -153,6 +155,16 @@ class TextBlock(Block):
     def show(self, content: Content) -> None:
         self._content = content
         self.refresh(layout=True)
+
+    def signature(self, entry: Entry, ctx: Context) -> object:
+        return self._text(entry)
+
+    async def apply(self, entry: Entry, ctx: Context) -> None:
+        self.show(Content(self._text(entry)))
+
+    @staticmethod
+    def _text(entry: Entry) -> str:
+        return entry.item.text if entry.item else entry.local.text if entry.local else ""
 
 
 class PromptBlock(TextBlock):

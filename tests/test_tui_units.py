@@ -23,9 +23,9 @@ from clankit.agent.events import (
     SkillSaved,
     UserMessage,
 )
-from clankit.agent.state import SessionView
+from clankit.agent.state import Item, SessionView
 from clankit.config.schema import Config, ConfigError, Setting
-from clankit.tui.entries import History, node_entries, root_entries
+from clankit.tui.entries import Entry, History, node_entries, root_entries
 from clankit.tui.format import (
     ellipsize,
     ellipsize_left,
@@ -40,7 +40,7 @@ from clankit.tui.pump import EventPump
 from clankit.tui.requests import looks_like_diff, node_path, pending_requests
 from clankit.tui.settings import display_path, set_method, setting_saver
 from clankit.tui.tasktree import MIN_LABEL, Row, indent_for, render_row
-from clankit.tui.transcript import clean_markdown, diff_stat
+from clankit.tui.transcript import Block, Context, TextBlock, clean_markdown, diff_stat
 
 
 @pytest.mark.parametrize(
@@ -185,6 +185,27 @@ def test_diff_helpers() -> None:
     assert diff_stat(diff) == (2, 1)
     assert looks_like_diff(diff) and not looks_like_diff("rm -rf build")
     assert clean_markdown("see ![plot](p.png)") == "see [plot](p.png)"
+
+
+# -- transcript blocks ------------------------------------------------------------------------
+
+
+async def test_plain_block_syncs_and_shows_nothing() -> None:
+    entry = Entry(key="k", kind="unknown", ts=0.0, seq=0.0)
+    block = Block(entry)
+    assert block.signature(entry, Context(now=0.0)) is None
+    await block.sync(entry, Context(now=0.0))  # must not raise
+
+
+async def test_text_block_shows_the_entry_text_by_default() -> None:
+    item = Item(id="i", kind="notice", seq=1, ts=0.0, text="hello")
+    entry = Entry(key="k", kind="unknown", ts=0.0, seq=0.0, item=item)
+    block = TextBlock(entry)
+    await block.sync(entry, Context(now=0.0))
+    assert block.render().plain == "hello"
+    item.text = "updated"
+    await block.sync(entry, Context(now=0.0))
+    assert block.render().plain == "updated"
 
 
 # -- pump -------------------------------------------------------------------------------------

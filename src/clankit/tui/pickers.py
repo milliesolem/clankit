@@ -108,14 +108,16 @@ class PickerScreen(ViewScreen):
         self.filter_input.focus()
 
     def choices(self) -> list[Choice]:
-        raise NotImplementedError
+        """The rows this picker offers. Subclasses provide them; the base has none."""
+        return []
 
     def current(self) -> str | None:
         """The id of the choice in effect now, highlighted when the picker opens."""
         return None
 
     def choose(self, choice_id: str) -> None:
-        raise NotImplementedError
+        """Act on a chosen row. Subclasses run a command; the base just closes."""
+        self.dismiss()
 
     def preview(self, choice_id: str) -> None:
         """Called when the highlight moves; most pickers do nothing."""
