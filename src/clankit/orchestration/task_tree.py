@@ -586,7 +586,7 @@ class TaskTreeOrchestrator(Orchestrator):
         return subtasks
 
     @staticmethod
-    def _scope(value: Any) -> tuple[str, ...] | None | str:
+    def _scope(value: Any) -> tuple[str, ...] | str | None:
         if value is None:
             return None
         cleaned: list[str] = []

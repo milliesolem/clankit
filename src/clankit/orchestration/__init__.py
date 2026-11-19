@@ -36,6 +36,12 @@ def register(cls: type[Orchestrator]) -> type[Orchestrator]:
     return cls
 
 
+def unregister(name: str) -> None:
+    """Remove a method added with `register()`. Built-in methods cannot be removed."""
+    if name not in BUILTIN:
+        _registered.pop(name, None)
+
+
 def get_orchestrator(name: str) -> type[Orchestrator]:
     if name in _registered:
         return _registered[name]

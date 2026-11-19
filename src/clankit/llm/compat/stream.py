@@ -476,7 +476,8 @@ class StreamAccumulator:
 
 
 def _new_id() -> str:
-    return f"call_{uuid.uuid4().hex[:16]}"
+    #: Generated ids stay out of the "call_..." namespace providers use for their own ids.
+    return f"tool_{uuid.uuid4().hex[:16]}"
 
 
 def _content_text(value: object) -> str:

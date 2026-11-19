@@ -15,12 +15,11 @@ from clankit.config.schema import Config
 from clankit.config.store import ConfigStore
 from clankit.llm.provider import ProviderError
 from clankit.llm.scripted import ScriptedProvider
-from clankit.orchestration import register
+from clankit.orchestration import register, unregister
 from clankit.orchestration.base import AskUserTool, Orchestrator
 from clankit.runtime import Runtime, RuntimeThread
 
 
-@register
 class OneAgent(Orchestrator):
     """Minimal method for these tests: a persistent root agent with an ask_user tool."""
 
@@ -42,6 +41,17 @@ class OneAgent(Orchestrator):
 
     def steer(self, text: str) -> None:
         self.agent.steer(text)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _test_one_method() -> None:
+    """Register the module's method for its tests only: the global registry must stay
+    clean for other test files that enumerate orchestration methods."""
+    register(OneAgent)
+    try:
+        yield
+    finally:
+        unregister(OneAgent.name)
 
 
 @pytest.fixture

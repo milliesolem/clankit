@@ -26,7 +26,7 @@ from clankit.config.schema import Config, ProviderConfig
 from clankit.llm.provider import ProviderError
 from clankit.llm.scripted import ScriptedProvider, call
 from clankit.llm.types import ChatRequest, TextBlock, ToolResultBlock, ToolUseBlock
-from clankit.orchestration import register
+from clankit.orchestration import register, unregister
 from clankit.orchestration.base import Orchestrator
 from clankit.runtime import Runtime
 from clankit.skills import document
@@ -209,7 +209,6 @@ class Bash(Tool):
         return ToolOutput("Exit code 1\n\nModuleNotFoundError: No module named 'httpx2'")
 
 
-@register
 class Worker(Orchestrator):
     name = "test-skills-worker"
     title = "Test worker"
@@ -224,6 +223,17 @@ class Worker(Orchestrator):
         result = await self.agent.run(prompt)
         self.session.update_node(self.root, status="done")
         return result.text
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _test_worker_method() -> None:
+    """Register the module's method for its tests only: the global registry must stay
+    clean for other test files that enumerate orchestration methods."""
+    register(Worker)
+    try:
+        yield
+    finally:
+        unregister(Worker.name)
 
 
 @pytest.fixture

@@ -95,7 +95,11 @@ async def grep(ctx: ToolContext, pattern: str, **more: Any) -> ToolOutput:
 
 def listed(output: ToolOutput) -> list[str]:
     assert not output.is_error, output.content
-    return [line for line in output.content.split("\n") if not line.startswith("[")]
+    return [
+        line
+        for line in output.content.split("\n")
+        if not line.startswith("[") and not line.startswith("No ")
+    ]
 
 
 # --------------------------------------------------------------------------------------------
@@ -567,7 +571,7 @@ async def test_a_cancelled_search_kills_ripgrep(
 async def test_ripgrep_is_stopped_once_enough_lines_are_in_hand(
     ctx: ToolContext, tree: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record = '{"type":"match","data":{"path":{"text":"a.py"},"lines":{"text":"foo\\n"},"line_number":1}}'
+    record = '{"type":"match","data":{"path":{"text":"a.py"},"lines":{"text":"foo\\\\n"},"line_number":1}}'
     pid_file = tmp_path / "rg.pid"
     endless = fake_ripgrep(
         tmp_path, f"echo $$ > {pid_file}\nwhile true; do echo '{record}'; done"

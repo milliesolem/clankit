@@ -22,7 +22,7 @@ import re
 import shutil
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -104,6 +104,28 @@ def _normalise_glob(pattern: str) -> str:
     while pattern.startswith("./"):
         pattern = pattern[2:]
     return f"{pattern}**" if pattern.endswith("/") else pattern
+
+
+def _invalid_glob_reason(pattern: str) -> str | None:
+    """ripgrep's glob errors: an unclosed character class or alternate group."""
+    in_class = False
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "\\":
+            index += 2
+            continue
+        if in_class:
+            if char == "]":
+                in_class = False
+        elif char == "[":
+            in_class = True
+        elif char == "{" and pattern.find("}", index + 1) == -1:
+            return "unclosed alternate group; missing '}'"
+        index += 1
+    if in_class:
+        return "unclosed character class; missing ']'"
+    return None
 
 
 def _expand_braces(pattern: str) -> list[str]:
@@ -386,11 +408,14 @@ async def _list_files(root: Path, pattern: str) -> list[str]:
     if rg is None:
         matches = glob_matcher(pattern)
         return await _in_thread(lambda stop: [rel for rel in _walk(root, stop) if matches(rel)])
-    args = [*_RG_COMMON, "--files", f"--glob={pattern}", *_skip_globs()]
+    if reason := _invalid_glob_reason(pattern):
+        raise _SearchFailed(f"Invalid glob: error parsing glob {pattern!r}: {reason}")
+    args = [*_RG_COMMON, "--files", *_skip_globs()]
     code, out, err = await _rg(rg, args, root)
     if code == 2 and not out:
         raise _rg_failure(err, pattern)
-    return out.splitlines()
+    matches = glob_matcher(pattern)
+    return [rel for rel in out.splitlines() if matches(rel)]
 
 
 def _modified(path: Path) -> int:
@@ -419,6 +444,8 @@ class _Search:
     context: int
     #: Clankit's own config file as a path relative to `root`, when the search can reach it.
     config: str | None
+    #: The compiled `glob`, computed on first use (the dataclass is frozen).
+    _matcher: Callable[[str], bool] | None = field(init=False, default=None)
 
     def shows(self, rel: str) -> bool:
         """May results from `rel` be shown? Not when it looks like it holds secrets, unless
@@ -426,6 +453,16 @@ class _Search:
         if self.only is not None:
             return True
         return rel != self.config and not secret_name(rel.rpartition("/")[2])
+
+    def glob_matches(self, rel: str) -> bool:
+        """Does `rel` match the glob, if one was given? A named file is never hidden."""
+        if self.glob is None or self.only is not None:
+            return True
+        matcher = self._matcher
+        if matcher is None:
+            matcher = glob_matcher(self.glob)
+            object.__setattr__(self, "_matcher", matcher)
+        return matcher(rel)
 
 
 @dataclass(frozen=True, slots=True)
@@ -555,7 +592,7 @@ async def _matching_counts(search: _Search) -> dict[str, int]:
         counts = await _in_thread(lambda stop: _py_counts(search, stop))
     else:
         counts = await _rg_counts(rg, search)
-    return {rel: count for rel, count in counts.items() if search.shows(rel)}
+    return {rel: count for rel, count in counts.items() if search.shows(rel) and search.glob_matches(rel)}
 
 
 async def _matching_lines(search: _Search, limit: int) -> tuple[list[_Line], bool]:
@@ -650,8 +687,8 @@ def _rg_args(search: _Search) -> list[str]:
     args = [*_RG_COMMON, "--sort", "path", "--crlf"]
     if search.ignore_case:
         args.append("--ignore-case")
-    if search.glob:
-        args.append(f"--glob={search.glob}")
+    if search.glob and (reason := _invalid_glob_reason(search.glob)):
+        raise _SearchFailed(f"Invalid glob: error parsing glob {search.glob!r}: {reason}")
     args += [*_skip_globs(), f"--regexp={search.regex}"]
     if search.only is not None:
         args += ["--", search.only]
@@ -726,6 +763,8 @@ async def _rg_records(stream: asyncio.StreamReader, search: _Search) -> AsyncIte
         data = record["data"]
         rel = _rg_text(data["path"])
         if not search.shows(rel):
+            continue
+        if not search.glob_matches(rel):
             continue
         text = _rg_text(data["lines"]).rstrip("\r\n")
         yield _Line(rel, data["line_number"], text, record["type"] == "match")
