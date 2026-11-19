@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from clankit import __version__, paths
+from clankit import __version__, paths, updater
 from clankit.config.schema import PERMISSION_MODES, ConfigError
 
 
@@ -70,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    updater.maybe_update()
     try:
         if args.command == "config":
             return _config()

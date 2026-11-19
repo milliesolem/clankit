@@ -26,6 +26,7 @@ from clankit.config.schema import (
     PermissionsConfig,
     SkillsConfig,
     UIConfig,
+    UpdatesConfig,
     WebConfig,
 )
 from clankit.llm.types import EFFORT_LEVELS
@@ -143,6 +144,12 @@ web {
     /- open-browser $open_browser
 }
 
+// Keeping current.
+updates {
+    // Check PyPI at most once a day; a regular pip installation is upgraded quietly.
+    /- check $check
+}
+
 // Your own colour themes. `base` starts from an existing theme and the other lines replace
 // single colours, written "#rrggbb".
 themes {
@@ -181,6 +188,7 @@ def starter_document() -> str:
         host=format_value(web.host),
         port=format_value(web.port),
         open_browser=format_value(web.open_browser),
+        check=format_value(UpdatesConfig().check),
     )
 
 

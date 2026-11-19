@@ -38,6 +38,7 @@ from clankit.config.schema import (
     ProviderConfig,
     SkillsConfig,
     UIConfig,
+    UpdatesConfig,
     WebConfig,
 )
 from clankit.llm.types import EFFORT_LEVELS, ModelRef
@@ -367,6 +368,10 @@ ROOT = Block(
                 WebConfig(), {"host": _TEXT, "port": _whole(0, 65535), "open-browser": _FLAG}
             ),
         ),
+        "updates": Block(
+            "in updates",
+            _settings(UpdatesConfig(), {"check": _FLAG}),
+        ),
         "themes": Block(
             "in themes",
             entries=Block(
@@ -411,6 +416,7 @@ def config_from_plain(plain: Plain) -> Config:
         skills=_instance(SkillsConfig, plain["skills"]),
         ui=_instance(UIConfig, plain["ui"]),
         web=_instance(WebConfig, plain["web"]),
+        updates=_instance(UpdatesConfig, plain["updates"]),
         themes={
             key: {token: colour for token, colour in theme.items() if colour is not None}
             for key, theme in plain["themes"].items()
@@ -467,6 +473,7 @@ def _laid_out(config: Config) -> Plain:
         "skills": _attributes(config.skills),
         "ui": _attributes(config.ui),
         "web": _attributes(config.web),
+        "updates": _attributes(config.updates),
         "themes": config.themes,
     }
 

@@ -32,6 +32,7 @@ from clankit.runtime import Runtime
 def isolated_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLANKIT_CONFIG_DIR", str(tmp_path / "config"))
     monkeypatch.setenv("CLANKIT_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CLANKIT_NO_UPDATE", "1")
     for name in ("ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
 

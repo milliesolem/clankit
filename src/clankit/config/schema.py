@@ -207,6 +207,14 @@ class WebConfig:
 
 
 @dataclass(slots=True)
+class UpdatesConfig:
+    """Self-updates from PyPI: `check` looks for a newer release at most once a day and,
+    when the running installation is a regular pip one, installs it quietly."""
+
+    check: bool = True
+
+
+@dataclass(slots=True)
 class Config:
     models: ModelsConfig = field(default_factory=ModelsConfig)
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
@@ -216,6 +224,7 @@ class Config:
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    updates: UpdatesConfig = field(default_factory=UpdatesConfig)
     #: User-defined colour themes: theme id -> {token name: "#rrggbb"}. A theme may set
     #: ``base`` to the id of a built-in theme and override only some tokens.
     themes: dict[str, dict[str, str]] = field(default_factory=dict)
