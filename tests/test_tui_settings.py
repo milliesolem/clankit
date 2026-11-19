@@ -291,6 +291,35 @@ async def test_skill_proposals_can_be_approved_rejected_and_deleted(app: Clankit
         await wait_for(pilot, lambda: library.get("lint-first") is None)
 
 
+async def test_stale_provider_events_after_a_category_switch_are_ignored(app: ClankitApp) -> None:
+    """A highlight or save from the provider list can still be delivered after the form
+    switched to another category (its message pump runs alongside the screen's); the queued
+    rebuilds must not crash and must leave the other category's form alone."""
+    async with app.run_test(size=SIZE) as pilot:
+        screen = await open_settings(pilot, app, "providers")
+        provider = screen._provider
+        assert provider is not None
+        await screen.show_category("models")
+        await screen._rebuild("#provider-detail", screen._provider_detail)
+        await screen._refresh_providers(focus="provider:anthropic:key")
+        assert screen.category == "models"
+        assert screen._provider == provider
+        assert has_control(screen, "models.roles.subagent")
+
+
+async def test_stale_method_highlight_updates_only_the_selection(app: ClankitApp) -> None:
+    async with app.run_test(size=SIZE) as pilot:
+        screen = await open_settings(pilot, app, "orchestration")
+        methods = screen.query_one("#method-list")
+        option = next(o for o in methods._options if o.id == "demo")  # type: ignore[attr-defined]
+        await screen.show_category("agents")
+        screen._method_highlighted(
+            methods.OptionHighlighted(methods, option, 1)  # type: ignore[attr-defined]
+        )
+        assert screen._method == "demo"
+        assert has_control(screen, "agent.max_turns")
+
+
 @pytest.mark.parametrize("where", ["main", "settings"])
 async def test_every_theme_applies_without_errors(app: ClankitApp, where: str) -> None:
     async with app.run_test(size=SIZE) as pilot:

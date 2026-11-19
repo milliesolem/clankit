@@ -559,7 +559,9 @@ class SettingsScreen(ViewScreen):
 
     async def _refresh_providers(self, *, focus: str) -> None:
         """Repaint the provider list in place and rebuild the open provider's details."""
-        provider_list = self.form.query_one("#provider-list", OptionList)
+        provider_list = self._find("#provider-list")
+        if not isinstance(provider_list, OptionList):
+            return  # the form changed under us; the next build starts from fresh state
         for row in actions.provider_rows(self.runtime.config):
             provider_list.replace_option_prompt(row.id, self._provider_line(row))
         await self._rebuild("#provider-detail", self._provider_detail)
@@ -573,8 +575,14 @@ class SettingsScreen(ViewScreen):
             self._provider = event.option.id
             await self._rebuild("#provider-detail", self._provider_detail)
 
+    def _find(self, selector: str) -> Widget | None:
+        """The first widget matching `selector`, or None when the form was rebuilt since."""
+        return next(iter(self.form.query(selector)), None)
+
     async def _rebuild(self, selector: str, build: Callable[[], list[Widget]]) -> None:
-        container = self.form.query_one(selector)
+        container = self._find(selector)
+        if container is None:
+            return  # a category switch rebuilt the form while this rebuild was queued
         for key in [k for k, row in self._rows.items() if row in container.query(FieldRow)]:
             self._rows.pop(key, None)
             self._savers.pop(key, None)
@@ -671,7 +679,9 @@ class SettingsScreen(ViewScreen):
     @on(OptionList.OptionHighlighted, "#method-list")
     def _method_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         self._method = event.option.id
-        self.form.query_one("#method-guidance", Static).update(self._guidance(self._method))
+        guidance = self._find("#method-guidance")
+        if isinstance(guidance, Static):
+            guidance.update(self._guidance(self._method))
 
     @on(OptionList.OptionSelected, "#method-list")
     async def _method_selected(self, event: OptionList.OptionSelected) -> None:
@@ -685,7 +695,9 @@ class SettingsScreen(ViewScreen):
             return
         self._saved()
         await self.show_category("orchestration")
-        self.form.query_one("#method-list").focus()
+        method_list = self._find("#method-list")
+        if method_list is not None:
+            method_list.focus()
 
     # -- appearance -----------------------------------------------------------------------------
 
@@ -828,7 +840,9 @@ class SettingsScreen(ViewScreen):
                 if self._confirm_delete != name:
                     self._confirm_delete = name
                     await self._rebuild("#skill-detail", self._skill_detail)
-                    self.form.query_one("#skill-detail ActionButton").focus()
+                    button = self._find("#skill-detail ActionButton")
+                    if button is not None:
+                        button.focus()
                     return
                 library.delete(name)
                 self._confirm_delete = None
