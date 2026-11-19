@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from clankit.config.catalog import effective_providers
+from clankit.config.catalog import CATALOG, effective_providers
 from clankit.config.schema import Config, ProviderConfig
 from clankit.llm.provider import Provider, ProviderError
 from clankit.llm.types import ModelInfo, ModelRef
@@ -45,6 +45,7 @@ class ProviderRegistry:
     def __init__(self, config: Config, *, factory: ProviderFactory = build_provider) -> None:
         self._factory = factory
         self._configs: dict[str, ProviderConfig] = {}
+        self._config: Config | None = None
         self._default = ""
         self._live: dict[str, tuple[ProviderConfig, Provider]] = {}
         self._injected: dict[str, Provider] = {}
@@ -57,6 +58,7 @@ class ProviderRegistry:
     def reconfigure(self, config: Config) -> None:
         """Adopt a new configuration. Clients whose settings changed are rebuilt on next use."""
         self._configs = effective_providers(config)
+        self._config = config
         self._default = config.models.default
         for provider_id, (old, provider) in list(self._live.items()):
             if self._configs.get(provider_id) != old:
@@ -127,37 +129,63 @@ class ProviderRegistry:
         """
         models: list[ModelInfo] = []
         for provider_id in self.provider_ids():
-            seen: dict[str, ModelInfo] = {}
-            cfg = self._configs.get(provider_id)
-            for entry in cfg.models if cfg else ():
-                seen[entry.id] = ModelInfo(
-                    provider=provider_id,
-                    id=entry.id,
-                    name=entry.name or entry.id,
-                    context_window=entry.context_window,
-                    max_output=entry.max_output,
-                    supports_tools=entry.tools,
-                    free=entry.free,
-                    note=entry.note,
-                    input_price=entry.input_price,
-                    output_price=entry.output_price,
-                )
-            for info in self._discovered.get(provider_id, ()):
-                declared = seen.get(info.id)
-                if declared is None:
-                    seen[info.id] = info
-                else:
-                    declared.context_window = declared.context_window or info.context_window
-                    declared.max_output = declared.max_output or info.max_output
-                    if declared.supports_tools is None:
-                        declared.supports_tools = info.supports_tools
-                    if declared.free is None:
-                        declared.free = info.free
-                    if declared.input_price is None:
-                        declared.input_price = info.input_price
-                        declared.output_price = info.output_price
-            models.extend(seen.values())
+            models.extend(self.known_models_for(provider_id))
         return models
+
+    def known_models_for(self, provider_id: str) -> list[ModelInfo]:
+        """The models of one provider: declared facts merged over discovered ones."""
+        seen: dict[str, ModelInfo] = {info.id: info for info in self._declared(provider_id)}
+        for info in self._discovered.get(provider_id, ()):
+            declared = seen.get(info.id)
+            if declared is None:
+                seen[info.id] = info
+            else:
+                declared.context_window = declared.context_window or info.context_window
+                declared.max_output = declared.max_output or info.max_output
+                if declared.supports_tools is None:
+                    declared.supports_tools = info.supports_tools
+                if declared.free is None:
+                    declared.free = info.free
+                if declared.input_price is None:
+                    declared.input_price = info.input_price
+                    declared.output_price = info.output_price
+        return list(seen.values())
+
+    def _declared(self, provider_id: str) -> list[ModelInfo]:
+        """The models the configuration and catalog declare for a provider.
+
+        Catalog entries for local servers that discover their models are suggestions for the
+        catalog's default address. A suggestion no longer applies - and is dropped - once the
+        server has been asked for its real list, or when the base URL points elsewhere. Models
+        the user declared themselves always stay.
+        """
+        cfg = self._configs.get(provider_id)
+        if cfg is None:
+            return []
+        cat = CATALOG.get(provider_id)
+        user = self._config.providers.get(provider_id) if self._config is not None else None
+        kept = {entry.id for entry in user.models} if user is not None else set()
+        if cat is not None and cat.discovers_models and (
+            cfg.base_url != cat.base_url or provider_id in self._discovered
+        ):
+            entries = [entry for entry in cfg.models if entry.id in kept]
+        else:
+            entries = cfg.models
+        return [
+            ModelInfo(
+                provider=provider_id,
+                id=entry.id,
+                name=entry.name or entry.id,
+                context_window=entry.context_window,
+                max_output=entry.max_output,
+                supports_tools=entry.tools,
+                free=entry.free,
+                note=entry.note,
+                input_price=entry.input_price,
+                output_price=entry.output_price,
+            )
+            for entry in entries
+        ]
 
     def model_info(self, ref: ModelRef) -> ModelInfo | None:
         return next(
@@ -187,11 +215,12 @@ class ProviderRegistry:
             pass
         for provider_id in usable:
             cfg = self._configs.get(provider_id)
+            declared = self._declared(provider_id)
             preferred = cfg.options.get("default-model") if cfg else None
-            if preferred:
+            if preferred and any(model.id == preferred for model in declared):
                 return ModelRef(provider_id, str(preferred))
-            if cfg and cfg.models:
-                return ModelRef(provider_id, cfg.models[0].id)
+            if declared:
+                return ModelRef(provider_id, declared[0].id)
             discovered = self._discovered.get(provider_id)
             if discovered:
                 return ModelRef(provider_id, discovered[0].id)

@@ -331,3 +331,25 @@ def test_groq_failed_generation_is_worth_another_attempt() -> None:
 def test_in_stream_errors(payload: Any, kind: str, status: int | None) -> None:
     error = stream_error("acme", payload)
     assert (error.kind, error.status, error.provider) == (kind, status, "acme")
+
+
+# --------------------------------------------------------------------------------------------
+# Missing models and paths
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://192.168.137.1:11434", "http://localhost:8000", "https://api.example.com"],
+)
+def test_not_found_on_a_pathless_base_url_suggests_a_path(base_url: str) -> None:
+    error = status_error("local", 404, body("model 'gpt-oss:20b' not found"), {}, base_url)
+    assert error.kind == "not_found"
+    assert "such as /v1" in error.message and base_url in error.message
+
+
+def test_not_found_on_a_base_url_with_a_path_stays_plain() -> None:
+    error = status_error(
+        "local", 404, body("model 'gpt-oss:20b' not found"), {}, "http://localhost:11434/v1"
+    )
+    assert "such as /v1" not in error.message

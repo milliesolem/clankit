@@ -81,7 +81,7 @@ _LABELS: dict[ErrorKind, str] = {
 def translate(exc: Exception, *, provider: str, base_url: str) -> ProviderError:
     """Turn anything the SDK or the transport raised into a `ProviderError`."""
     if isinstance(exc, openai.APIStatusError):
-        return status_error(provider, exc.status_code, exc.body, exc.response.headers)
+        return status_error(provider, exc.status_code, exc.body, exc.response.headers, base_url)
     if isinstance(exc, (openai.APITimeoutError, httpx2.TimeoutException)):
         return ProviderError(
             f"{_LABELS['network']} at {base_url}: the request timed out",
@@ -111,7 +111,11 @@ def translate(exc: Exception, *, provider: str, base_url: str) -> ProviderError:
 
 
 def status_error(
-    provider: str, status: int, body: object, headers: Mapping[str, str]
+    provider: str,
+    status: int,
+    body: object,
+    headers: Mapping[str, str],
+    base_url: str = "",
 ) -> ProviderError:
     """Classify an HTTP error response. `body` is the decoded error body, in any wrapping."""
     detail = _detail(body)
@@ -145,7 +149,8 @@ def status_error(
                 provider=provider,
                 status=status,
             )
-    return _error(provider, kind, detail, status=status, retry_after=wait)
+    hint = _path_hint(base_url) if kind == "not_found" else ""
+    return _error(provider, kind, detail, status=status, retry_after=wait, hint=hint)
 
 
 def stream_error(provider: str, body: object) -> ProviderError:
@@ -202,13 +207,23 @@ def _error(
     *,
     status: int | None = None,
     retry_after: float | None = None,
+    hint: str = "",
 ) -> ProviderError:
     message = f"{_LABELS[kind]}: {detail}" if detail else _LABELS[kind]
     if status is not None:
         message += f" (HTTP {status})"
+    if hint:
+        message += f" {hint}"
     return ProviderError(
         message, kind=kind, provider=provider, status=status, retry_after=retry_after
     )
+
+
+def _path_hint(base_url: str) -> str:
+    """For a base URL that names no path: many servers keep their OpenAI API under one."""
+    if not base_url or (urlsplit(base_url).path or "").strip("/"):
+        return ""
+    return f"(this server may serve its API under a path such as /v1; the base-url is {base_url})"
 
 
 # --------------------------------------------------------------------------------------------

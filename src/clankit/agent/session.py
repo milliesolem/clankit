@@ -164,6 +164,9 @@ class Session:
     def model_info(self, model: ModelRef) -> ModelInfo | None:
         return self.runtime.providers.model_info(model)
 
+    def known_models(self, provider_id: str) -> list[ModelInfo]:
+        return self.runtime.providers.known_models_for(provider_id)
+
     def emit(self, event: Event) -> Event:
         return self.bus.publish(event)
 

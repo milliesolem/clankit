@@ -47,6 +47,8 @@ class ProviderRow:
     base_url: str
     enabled: bool
     usable: bool
+    #: Why the base URL cannot work, or "" when it is fine.
+    url_problem: str
     #: "no" | "partly" | "yes" | "local" for built-in providers, "" for custom ones.
     free: str
     note: str
@@ -73,6 +75,7 @@ def provider_rows(config: Config) -> list[ProviderRow]:
                 base_url=provider.base_url,
                 enabled=provider.enabled,
                 usable=provider.usable,
+                url_problem=provider.base_url_problem(),
                 free=cat.free if cat else "",
                 note=cat.note if cat else "",
                 signup_url=cat.signup_url if cat else "",

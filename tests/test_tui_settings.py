@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from clankit.config.schema import ProviderConfig
 from clankit.config.store import ConfigStore
 from clankit.runtime import Runtime
 from clankit.themes import all_themes
@@ -289,6 +290,21 @@ async def test_skill_proposals_can_be_approved_rejected_and_deleted(app: Clankit
         control(screen, "skill:delete:lint-first").focus()
         await pilot.press("enter")
         await wait_for(pilot, lambda: library.get("lint-first") is None)
+
+
+async def test_provider_with_a_broken_base_url_shows_no_checkmark(app: ClankitApp) -> None:
+    app.runtime.update_config(
+        lambda c: c.providers.__setitem__("homelab", ProviderConfig(id="homelab", keyless=True))
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        screen = await open_settings(pilot, app, "providers")
+        providers = screen.query_one("#provider-list")
+        ids = [o.id for o in providers._options]  # type: ignore[attr-defined]
+        providers.highlighted = ids.index("homelab")  # type: ignore[attr-defined]
+        await pilot.pause(0.05)
+        text = screen_text(app)
+        assert "✗" in text and "homelab" in text
+        assert "Not usable yet: no base-url; set the address of its API." in text
 
 
 async def test_stale_provider_events_after_a_category_switch_are_ignored(app: ClankitApp) -> None:

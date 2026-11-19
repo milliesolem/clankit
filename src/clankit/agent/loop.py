@@ -97,6 +97,10 @@ class AgentHost(Protocol):
 
     def model_info(self, model: ModelRef) -> ModelInfo | None: ...
 
+    def known_models(self, provider_id: str) -> list[ModelInfo]:
+        """The models `provider_id` offers, as far as they are known without asking."""
+        ...
+
     def emit(self, event: Event) -> Event: ...
 
     def record_usage(self, node_id: str, usage: Usage, context_tokens: int) -> None: ...
@@ -295,6 +299,8 @@ class Agent:
                     )
                     await asyncio.sleep(delay)
                     continue
+                if exc.kind == "not_found":
+                    raise await self._missing_model(exc, provider) from exc
                 raise
             except asyncio.CancelledError:
                 if streamed:
@@ -324,6 +330,34 @@ class Agent:
             self.context_tokens = reported or ctxmod.estimate_tokens(self.system, self.messages)
             self.host.record_usage(self.node_id, response.usage, self.context_tokens)
             return response
+
+    async def _missing_model(self, exc: ProviderError, provider: Provider) -> ProviderError:
+        """A "not found" that ends the run, with the models the server is known to offer.
+
+        The 404 usually means the model id does not exist on that server; naming what the
+        server does report turns a dead end into something the user can act on. When nothing
+        is known yet, the server itself is asked once, briefly.
+        """
+        provider_id = exc.provider or self.model.provider
+        offered = [model.id for model in self.host.known_models(provider_id)]
+        if not offered:
+            try:
+                offered = [
+                    model.id
+                    for model in await asyncio.wait_for(provider.list_models(), timeout=10)
+                ]
+            except (ProviderError, TimeoutError):
+                offered = []
+        if not offered:
+            return exc
+        listed = ", ".join(offered[:6]) + ("…" if len(offered) > 6 else "")
+        return ProviderError(
+            f"{exc.message} (the models {provider_id} is known to offer: {listed})",
+            kind=exc.kind,
+            provider=provider_id,
+            status=exc.status,
+            retry_after=exc.retry_after,
+        )
 
     # -- tools ----------------------------------------------------------------------------------
 

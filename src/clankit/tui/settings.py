@@ -386,12 +386,16 @@ class SettingsScreen(ViewScreen):
     def _provider_line(row: actions.ProviderRow) -> Content:
         if row.usable:
             glyph = (STATE_GLYPHS["done"], STATE_STYLES["done"])
+        elif row.url_problem:
+            glyph = (STATE_GLYPHS["failed"], STATE_STYLES["failed"])
         elif row.key_source == "keyless" and not row.enabled:
             glyph = (STATE_GLYPHS["cancelled"], STATE_STYLES["cancelled"])
         else:
             glyph = (STATE_GLYPHS["pending"], STATE_STYLES["pending"])
         status = _KEY_SOURCES.get(row.key_source, row.key_source)
-        if row.key_source == "keyless" and not row.enabled:
+        if row.url_problem:
+            status = row.url_problem
+        elif row.key_source == "keyless" and not row.enabled:
             status = "off"
         return Content.assemble(
             glyph,
@@ -418,6 +422,8 @@ class SettingsScreen(ViewScreen):
             ("   " + tag if tag else "", "$fg-muted"),
         )
         widgets: list[Widget] = [Static(heading, classes="detail-heading")]
+        if row.url_problem:
+            widgets.append(Note(f"Not usable yet: {row.url_problem}."))
         if row.note:
             widgets.append(Note(row.note))
         if row.signup_url:

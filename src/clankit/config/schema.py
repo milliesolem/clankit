@@ -13,6 +13,7 @@ import copy
 import os
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 PERMISSION_MODES: tuple[str, ...] = ("ask", "accept-edits", "auto", "read-only")
 SKILL_GENERATION_MODES: tuple[str, ...] = ("off", "ask", "auto")
@@ -88,7 +89,23 @@ class ProviderConfig:
     @property
     def usable(self) -> bool:
         """Can requests be sent to this provider right now?"""
-        return self.enabled and (self.keyless or bool(self.resolved_api_key))
+        if not (self.enabled and (self.keyless or bool(self.resolved_api_key))):
+            return False
+        return not self.base_url_problem()
+
+    def base_url_problem(self) -> str:
+        """Why this provider's base URL cannot work, or "" when it is fine.
+
+        `usable` and the settings screens both use this, so a misconfigured address is never
+        shown with a "ready" checkmark.
+        """
+        url = self.base_url.strip()
+        if not url:
+            return "" if self.kind == "anthropic" else "no base-url; set the address of its API"
+        parts = urlsplit(url)
+        if parts.scheme in ("http", "https") and parts.hostname:
+            return ""
+        return "base-url is not a valid address"
 
     def model(self, model_id: str) -> ModelEntry | None:
         return next((m for m in self.models if m.id == model_id), None)

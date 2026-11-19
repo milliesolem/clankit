@@ -10,6 +10,7 @@ import pytest
 from clankit.agent.events import AssistantMessage, Notice, ToolFinished, ToolStarted
 from clankit.agent.loop import INTERRUPTED, NOT_RUN, Agent
 from clankit.agent.session import Session
+from clankit.config.schema import ModelEntry, ProviderConfig
 from clankit.llm.provider import ProviderError
 from clankit.llm.scripted import ScriptedProvider, call
 from clankit.llm.types import ChatResponse, Message, TextBlock, ToolResultBlock, Usage
@@ -230,6 +231,35 @@ async def test_fatal_error_propagates_and_history_stays_usable(
         await agent.run("hi")
     scripted.push("now it works")
     assert (await agent.run("again")).text == "now it works"
+
+
+async def test_missing_model_error_names_the_models_the_provider_offers(
+    session: Session, scripted: ScriptedProvider
+) -> None:
+    session.runtime.update_config(
+        lambda c: c.providers.__setitem__(
+            "scripted",
+            ProviderConfig(
+                id="scripted",
+                base_url="http://localhost:8000/v1",
+                keyless=True,
+                models=[ModelEntry(id="qwen3-coder", name="Qwen3 Coder")],
+            ),
+        )
+    )
+    scripted.push(ProviderError("model 'nope' not found (HTTP 404)", kind="not_found"))
+    with pytest.raises(ProviderError) as caught:
+        await make_agent(session).run("hi")
+    assert "qwen3-coder" in str(caught.value)
+
+
+async def test_missing_model_error_asks_the_server_what_it_offers(
+    session: Session, scripted: ScriptedProvider
+) -> None:
+    scripted.push(ProviderError("model 'nope' not found (HTTP 404)", kind="not_found"))
+    with pytest.raises(ProviderError) as caught:
+        await make_agent(session).run("hi")
+    assert "test-model" in str(caught.value)
 
 
 async def test_cancel_mid_tool_round_answers_every_call(
