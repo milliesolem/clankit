@@ -1,0 +1,54 @@
+[project]
+name = "clankit"
+version = "0.1.0"
+description = "A coding agent that grows a task tree. Terminal and web UIs, any model."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.10",
+    "openai>=3.55",
+    "textual>=8.2",
+    "pyramid>=2.1",
+    "pyramid-jinja2>=2.10",
+    "waitress>=3.0",
+    "pyyaml>=6.0",
+    "markdown-it-py>=4.0",
+    "pygments>=2.19",
+    "jsonschema>=4.23",
+    "kdlquery==1.7.0",
+    "httpx2>=2.16",
+]
+
+[project.scripts]
+clankit = "clankit.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.3",
+    "webtest>=3.0",
+    "ruff>=0.14",
+    "ckdl==1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clankit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+ignore = ["E501", "RUF012"]
