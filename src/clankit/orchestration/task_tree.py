@@ -303,6 +303,14 @@ class DelegateTool(Tool):
         "split it into as few parts as possible.",
     }
 
+    #: A complete, realistic call, shown with the tool so weaker models see the mechanics
+    #: instead of guessing: two parts, separate write scopes, checks, and an ordering link.
+    _EXAMPLE = """\
+delegate({"subtasks": [
+  {"id": "parser", "title": "Tokenize config files", "brief": "Write src/parser.py that turns the KDL subset described in docs/kdl.md into Token dataclasses, plus tests/test_parser.py covering every rule. Do not change src/renderer.py.", "write_scope": ["src/parser.py", "tests/test_parser.py"], "checks": ["pytest tests/test_parser.py -q"]},
+  {"id": "renderer", "title": "Render tokens to HTML", "brief": "Once the parser lands, write src/renderer.py turning Token lists into the HTML described in docs/kdl.md. Reuse the parser's Token class unchanged.", "write_scope": ["src/renderer.py", "tests/test_renderer.py"], "checks": ["pytest tests/test_renderer.py -q"], "depends_on": ["parser"]}
+]})"""
+
     def __init__(self, tree: TaskTreeOrchestrator, node: NodeInfo, *, cross_model: bool) -> None:
         self._tree = tree
         self._node = node
@@ -311,7 +319,8 @@ class DelegateTool(Tool):
         self.description = (
             "Split your task into subtasks, each done by its own agent, and wait for their "
             "reports. Independent subtasks with separate write scopes run in parallel. "
-            f"{self._GUIDANCE.get(mode, self._GUIDANCE['adaptive'])}"
+            f"{self._GUIDANCE.get(mode, self._GUIDANCE['adaptive'])}\n\n"
+            f"Example call:\n{self._EXAMPLE}"
         )
         item: dict[str, Any] = {
             "type": "object",

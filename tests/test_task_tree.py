@@ -128,6 +128,8 @@ async def test_eager_mode_pushes_splitting_in_the_prompt_and_the_tool(
     delegate = next(t for t in request.tools if t.name == "delegate")
     assert "Splitting is expected" in delegate.description
     assert "most tasks are better done yourself" not in delegate.description
+    assert "Example call:" in delegate.description
+    assert '"depends_on": ["parser"]' in delegate.description
     assert "Split the work up front" in request.system
 
 

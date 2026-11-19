@@ -1,6 +1,6 @@
 [project]
 name = "clankit"
-version = "0.1.7"
+version = "0.1.8"
 description = "A coding agent that grows a task tree. Terminal and web UIs, any model."
 readme = "README.md"
 requires-python = ">=3.12"
